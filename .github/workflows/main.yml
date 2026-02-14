@@ -1,0 +1,40 @@
+name: AI News Bot Schedule
+
+on:
+  schedule:
+    # Запуск в конкретные часы (время указано в UTC!)
+    # 8=11мск, 9=12мск, 10=13мск, 12=15мск, 13=16мск, 15=18мск, 16=19мск
+    - cron: '0 8,9,10,12,13,15,16 * * *'
+  
+  # Оставляем возможность запустить кнопку вручную для тестов
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run bot
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python main.py
+
+      - name: Save last link status
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add last_link.txt
+          git commit -m "Update last published news" || echo "No new news to save"
+          git push
