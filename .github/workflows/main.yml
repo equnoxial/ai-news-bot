@@ -38,11 +38,10 @@ jobs:
         run: python main.py
 
       - name: Save last link status
-        # Этот блок теперь работает надежно
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git pull origin main # Сначала забираем актуальные данные
+          touch last_link.txt # Создаем файл, если его вдруг нет
           git add last_link.txt
-          git commit -m "Update last news link" || echo "Nothing to commit"
+          git commit -m "Update last news link" || echo "No changes"
           git push
