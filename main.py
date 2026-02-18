@@ -9,7 +9,6 @@ TG_TOKEN = os.getenv('TG_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
 def get_ai_text(title):
-    print(f"Запрос к ИИ для: {title}")
     api_url = "https://api-inference.huggingface.co/models/Mistral-7B-Instruct-v0.3"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     prompt = f"<s>[INST] Напиши очень короткий пост для Телеграм на русском про это: {title}. Используй эмодзи. [/INST]"
@@ -37,25 +36,23 @@ def main():
 
     post_text = get_ai_text(entry.title)
     
-    # Кодируем заголовок для ссылки на картинку
-    clean_title = urllib.parse.quote(entry.title)
-    img_url = f"https://image.pollinations.ai/prompt/cyberpunk%20style%20{clean_title}?width=1080&height=1080&nologo=true&seed={random.randint(1,1000)}"
+    # ФИКС КАРТИНКИ: Кодируем заголовок, чтобы ссылка не ломалась
+    encoded_prompt = urllib.parse.quote(f"artificial intelligence {entry.title}")
+    img_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&seed={random.randint(1,1000)}"
     
-    # ТЕПЕРЬ БЕЗ ИСТОЧНИКА:
-    caption = post_text
+    print(f"Отправляю фото: {img_url}")
     
-    print("Отправляю в Telegram...")
-    r = requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto", 
-                      data={"chat_id": CHAT_ID, "photo": img_url, "caption": caption, "parse_mode": "Markdown"})
+    # Попытка отправить фото
+    payload = {"chat_id": CHAT_ID, "photo": img_url, "caption": post_text, "parse_mode": "Markdown"}
+    r = requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto", data=payload)
     
     if r.status_code == 200:
         with open("last_link.txt", "w") as f: f.write(entry.link)
-        print("ПОБЕДА! Пост опубликован без источника.")
+        print("ПОБЕДА! Пост с картинкой ушел.")
     else:
-        print(f"Ошибка: {r.text}")
-        # Запасной вариант только текстом
+        print(f"Ошибка фото: {r.text}. Шлю только текст.")
         requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage", 
-                      data={"chat_id": CHAT_ID, "text": caption, "parse_mode": "Markdown"})
+                      data={"chat_id": CHAT_ID, "text": post_text, "parse_mode": "Markdown"})
 
 if __name__ == "__main__":
     main()
