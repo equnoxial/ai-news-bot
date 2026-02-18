@@ -17,7 +17,7 @@ def get_ai_content(title):
     try:
         # Прямое указание модели для нового SDK
         response = client.models.generate_content(
-            model="gemini-2.0-flash",  # Попробуем самую новую модель 2.0
+            model="gemini-1.5-flash",  # Попробуем самую новую модель 2.0
             contents=prompt
         )
         full_text = response.text
