@@ -4,49 +4,52 @@ import feedparser
 import requests
 from google import genai
 
-# Подключаем секреты
+# 1. Настройки (Названия теперь точно как в твоих Secrets)
 GEMINI_KEY = os.getenv('GEMINI_KEY')
 TG_TOKEN = os.getenv('TG_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-# Инициализируем Gemini по НОВОМУ стандарту
+# 2. Инициализация нового клиента
 client = genai.Client(api_key=GEMINI_KEY)
 
 def rewrite_news(title):
     prompt = f"Напиши короткий пост для Telegram на русском про: {title}. В конце добавь IMAGE_PROMPT: [описание картинки на английском]"
     try:
-        # Используем модель flash
-        response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
+        # Используем современный метод генерации
+        response = client.models.generate_content(
+            model="gemini-1.5-flash", 
+            contents=prompt
+        )
         full_text = response.text
         if "IMAGE_PROMPT:" in full_text:
             text, img_p = full_text.split("IMAGE_PROMPT:")
             return text.strip(), img_p.strip()
-        return full_text, "futuristic artificial intelligence technology"
+        return full_text, "technology news"
     except Exception as e:
-        print(f"Ошибка Gemini: {e}")
+        print(f"ОШИБКА GEMINI: {e}")
         return title, "artificial intelligence"
 
 def main():
-    # 1. Берем новость
+    # Получаем новость
     feed = feedparser.parse("https://techcrunch.com/category/artificial-intelligence/feed/")
     if not feed.entries: return
     title, link = feed.entries[0].title, feed.entries[0].link
 
-    # 2. Проверка памяти (чтобы не дублировать)
+    # Проверка на дубликаты
     if os.path.exists("last_link.txt"):
         with open("last_link.txt", "r") as f:
             if f.read().strip() == link:
                 print("Новых новостей нет.")
                 return
 
-    # 3. Делаем рерайт
     print(f"Обрабатываю: {title}")
     post_text, img_prompt = rewrite_news(title)
     
-    # 4. Генерируем картинку и отправляем
-    seed = random.randint(1, 100000)
+    # Генерация ссылки на картинку
+    seed = random.randint(1, 10000)
     img_url = f"https://pollinations.ai/p/{img_prompt.replace(' ', '%20')}?width=1080&height=1080&seed={seed}&model=flux"
     
+    # Отправка в Telegram
     tg_url = f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
