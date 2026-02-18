@@ -2,74 +2,61 @@ import os
 import random
 import feedparser
 import requests
-import time
 from google import genai
 
 # Настройки
 GEMINI_KEY = os.getenv('GEMINI_KEY')
 TG_TOKEN = os.getenv('TG_TOKEN')
-TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
+# Инициализация нового клиента
 client = genai.Client(api_key=GEMINI_KEY)
 
 def get_ai_content(title):
-    model_name = "gemini-2.0-flash" 
-    prompt = f"Напиши короткий пост для Telegram на русском про: {title}. В конце добавь IMAGE_PROMPT: [описание картинки на английском]"
+    # Используем стабильную 1.5 Flash
+    model_id = "gemini-1.5-flash"
+    prompt = f"Напиши короткий пост для Telegram на русском про: {title}. В конце добавь IMAGE_PROMPT: [описание картинки на английском для генерации]"
     
     try:
-        print(f"Пробую свежий ключ с моделью: {model_name}...")
-        response = client.models.generate_content(model=model_name, contents=prompt)
+        print(f"Запрос к {model_id}...")
+        response = client.models.generate_content(model=model_id, contents=prompt)
+        text = response.text
         
-        if response.text:
-            print("Ура! ИИ ответил.")
-            full_text = response.text
-            if "IMAGE_PROMPT:" in full_text:
-                text, img_p = full_text.split("IMAGE_PROMPT:")
-                return text.strip(), img_p.strip()
-            return full_text, "futuristic technology"
-            
+        if "IMAGE_PROMPT:" in text:
+            parts = text.split("IMAGE_PROMPT:")
+            return parts[0].strip(), parts[1].strip()
+        return text, "high-tech digital art"
     except Exception as e:
-        print(f"Даже с новым ключом ошибка: {e}")
+        print(f"Ошибка ИИ: {e}")
         return title, "artificial intelligence"
 
 def main():
-    # 1. Получаем новость
+    # Парсим новости
     feed = feedparser.parse("https://techcrunch.com/category/artificial-intelligence/feed/")
     if not feed.entries: return
-    title, link = feed.entries[0].title, feed.entries[0].link
-
-    # 2. Проверяем, была ли она уже
+    entry = feed.entries[0]
+    
+    # Проверка дублей
     if os.path.exists("last_link.txt"):
         with open("last_link.txt", "r") as f:
-            if f.read().strip() == link:
-                print("Новых новостей нет.")
+            if f.read().strip() == entry.link:
+                print("Новость уже была.")
                 return
 
-    print(f"Обрабатываю: {title}")
+    print(f"Работаем с: {entry.title}")
+    post_text, img_p = get_ai_content(entry.title)
     
-    # 3. Генерируем текст (перебор моделей внутри)
-    post_text, img_prompt = get_ai_content(title)
+    # Генерация картинки
+    img_url = f"https://pollinations.ai/p/{img_p.replace(' ', '%20')}?width=1024&height=1024&seed={random.randint(1,999)}&model=flux"
     
-    # 4. Генерируем картинку
-    seed = random.randint(1, 100000)
-    # Используем Flux (лучшее качество)
-    img_url = f"https://pollinations.ai/p/{img_prompt.replace(' ', '%20')}?width=1080&height=1080&seed={seed}&model=flux"
+    # Отправка
+    msg = f"🤖 *AI NEWS*\n\n{post_text}\n\n[Читать оригинал]({entry.link})"
+    r = requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto", 
+                      data={"chat_id": CHAT_ID, "photo": img_url, "caption": msg, "parse_mode": "Markdown"})
     
-    # 5. Отправляем в Telegram
-    tg_url = f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "photo": img_url,
-        "caption": f"{post_text}\n\n[Источник]({link})",
-        "parse_mode": "Markdown"
-    }
-    
-    r = requests.post(tg_url, data=payload)
     if r.status_code == 200:
-        with open("last_link.txt", "w") as f: f.write(link)
-        print("Пост успешно отправлен!")
-    else:
-        print(f"Ошибка Telegram: {r.text}")
+        with open("last_link.txt", "w") as f: f.write(entry.link)
+        print("Пост в канале!")
 
 if __name__ == "__main__":
     main()
