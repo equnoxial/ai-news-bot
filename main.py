@@ -2,6 +2,7 @@ import os
 import random
 import feedparser
 import requests
+import urllib.parse
 
 HF_TOKEN = os.getenv('HF_TOKEN')
 TG_TOKEN = os.getenv('TG_TOKEN')
@@ -11,49 +12,50 @@ def get_ai_text(title):
     print(f"Запрос к ИИ для: {title}")
     api_url = "https://api-inference.huggingface.co/models/Mistral-7B-Instruct-v0.3"
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-    prompt = f"<s>[INST] Напиши короткий хайповый пост для Телеграм на русском про это: {title}. Добавь эмодзи. [/INST]"
+    prompt = f"<s>[INST] Напиши очень короткий пост для Телеграм на русском про это: {title}. Используй эмодзи. [/INST]"
     
     try:
-        # Ждем ответ максимум 15 секунд, чтобы бот не зависал
         response = requests.post(api_url, headers=headers, json={"inputs": prompt}, timeout=15)
         if response.status_code == 200:
             result = response.json()
-            raw_text = result[0]['generated_text'].split("[/INST]")[-1].strip()
-            if raw_text:
-                return raw_text
-    except Exception as e:
-        print(f"ИИ не ответил вовремя, использую заголовок. (Ошибка: {e})")
-    
-    return f"🤖 *AI НОВОСТЬ*\n\n{title}"
+            text = result[0]['generated_text'].split("[/INST]")[-1].strip()
+            if text: return text
+    except:
+        pass
+    return f"🤖 *НОВОСТЬ ИИ*\n\n{title}"
 
 def main():
     feed = feedparser.parse("https://techcrunch.com/category/artificial-intelligence/feed/")
     if not feed.entries: return
     entry = feed.entries[0]
     
-    # Проверяем, был ли пост
     if os.path.exists("last_link.txt"):
         with open("last_link.txt", "r") as f:
             if f.read().strip() == entry.link:
                 print("Новых новостей нет.")
                 return
 
-    # Текст и картинка
     post_text = get_ai_text(entry.title)
-    # Исправляем картинку, чтобы не было логотипа
-    img_url = f"https://image.pollinations.ai/prompt/{entry.title.replace(' ', '%20')}?width=1080&height=1080&nologo=true"
     
-    caption = f"{post_text}\n\n[Читать в источнике]({entry.link})"
+    # Кодируем заголовок для ссылки на картинку
+    clean_title = urllib.parse.quote(entry.title)
+    img_url = f"https://image.pollinations.ai/prompt/cyberpunk%20style%20{clean_title}?width=1080&height=1080&nologo=true&seed={random.randint(1,1000)}"
     
-    # Отправка
+    # ТЕПЕРЬ БЕЗ ИСТОЧНИКА:
+    caption = post_text
+    
+    print("Отправляю в Telegram...")
     r = requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto", 
                       data={"chat_id": CHAT_ID, "photo": img_url, "caption": caption, "parse_mode": "Markdown"})
     
     if r.status_code == 200:
         with open("last_link.txt", "w") as f: f.write(entry.link)
-        print("ГОТОВО! Пост в канале.")
+        print("ПОБЕДА! Пост опубликован без источника.")
     else:
-        print(f"Ошибка Телеграм: {r.text}")
+        print(f"Ошибка: {r.text}")
+        # Запасной вариант только текстом
+        requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage", 
+                      data={"chat_id": CHAT_ID, "text": caption, "parse_mode": "Markdown"})
 
 if __name__ == "__main__":
     main()
