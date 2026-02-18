@@ -1,23 +1,32 @@
 name: build
+
 on:
   schedule:
-    - cron: '0 8,9,10,12,13,15,16 * * *' # Время в UTC (9:00 UTC = 12:00 МСК)
-  workflow_dispatch: # Чтобы можно было запустить вручную
+    # Запуск каждый день в 07:00 UTC (10:00 по МСК)
+    - cron: '0 8,9,10,12,13,15,16 * * *'
+  workflow_dispatch: # Позволяет запускать бота вручную кнопкой
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Даем права на запись, чтобы обновлять last_link.txt
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: true
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
       - name: Install dependencies
-        run: pip install feedparser requests
+        run: |
+          pip install feedparser requests
 
       - name: Run bot
         env:
@@ -25,10 +34,12 @@ jobs:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python main.py
-        - name: Save last link status
-run: |
+
+      - name: Save last link status
+        run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          # Проверяем, есть ли изменения в файле перед сохранением
           git add last_link.txt
-          git commit -m "Update last link" || exit 0
-          git push origin main
+          git commit -m "Update last news link" || echo "No changes to commit"
+          git push
