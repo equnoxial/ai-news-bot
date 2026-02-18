@@ -4,67 +4,68 @@ import feedparser
 import requests
 from google import genai
 
-# 1. Настройки (Названия теперь точно как в твоих Secrets)
-GEMINI_KEY = os.getenv('GEMINI_KEY')
-TG_TOKEN = os.getenv('TG_TOKEN')
-TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+# 1. Считываем секреты
+API_KEY = os.getenv('GEMINI_KEY')
+BOT_TOKEN = os.getenv('TG_TOKEN')
+CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-# 2. Инициализация нового клиента
-client = genai.Client(api_key=GEMINI_KEY)
+# 2. Настройка ИИ (только новый формат)
+client = genai.Client(api_key=API_KEY)
 
-def rewrite_news(title):
-    prompt = f"Напиши короткий пост для Telegram на русском про: {title}. В конце добавь IMAGE_PROMPT: [описание картинки на английском]"
+def get_ai_content(title):
+    prompt = f"Напиши короткий пост для Telegram на русском языке про новость: {title}. В самом конце сообщения напиши текст 'IMAGE_PROMPT: ' и добавь короткое описание картинки для этой новости на английском языке."
     try:
-        # Используем современный метод генерации
-        response = client.models.generate_content(
-            model="gemini-1.5-flash", 
-            contents=prompt
-        )
+        # Используем современную модель flash
+        response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
         full_text = response.text
+        
         if "IMAGE_PROMPT:" in full_text:
-            text, img_p = full_text.split("IMAGE_PROMPT:")
-            return text.strip(), img_p.strip()
-        return full_text, "technology news"
+            post_parts = full_text.split("IMAGE_PROMPT:")
+            return post_parts[0].strip(), post_parts[1].strip()
+        return full_text, "artificial intelligence futuristic"
     except Exception as e:
         print(f"ОШИБКА GEMINI: {e}")
-        return title, "artificial intelligence"
+        return title, "tech news"
 
 def main():
-    # Получаем новость
-    feed = feedparser.parse("https://techcrunch.com/category/artificial-intelligence/feed/")
+    # Получаем свежую новость
+    url = "https://techcrunch.com/category/artificial-intelligence/feed/"
+    feed = feedparser.parse(url)
     if not feed.entries: return
-    title, link = feed.entries[0].title, feed.entries[0].link
+    
+    first_news = feed.entries[0]
+    title, link = first_news.title, first_news.link
 
-    # Проверка на дубликаты
+    # Проверка на повторы
     if os.path.exists("last_link.txt"):
         with open("last_link.txt", "r") as f:
             if f.read().strip() == link:
-                print("Новых новостей нет.")
+                print("Новых новостей пока нет.")
                 return
 
     print(f"Обрабатываю: {title}")
-    post_text, img_prompt = rewrite_news(title)
+    text, img_p = get_ai_content(title)
     
-    # Генерация ссылки на картинку
-    seed = random.randint(1, 10000)
-    img_url = f"https://pollinations.ai/p/{img_prompt.replace(' ', '%20')}?width=1080&height=1080&seed={seed}&model=flux"
+    # Генерация картинки
+    img_url = f"https://pollinations.ai/p/{img_p.replace(' ', '%20')}?width=1080&height=1080&seed={random.randint(1,99999)}&model=flux"
     
     # Отправка в Telegram
-    tg_url = f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
+    send_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+    data = {
+        "chat_id": CHAT_ID,
         "photo": img_url,
-        "caption": f"{post_text}\n\n[Источник]({link})",
+        "caption": f"{text}\n\n[Источник]({link})",
         "parse_mode": "Markdown"
     }
     
-    r = requests.post(tg_url, data=payload)
-    if r.status_code == 200:
+    res = requests.post(send_url, data=data)
+    
+    if res.status_code == 200:
         with open("last_link.txt", "w") as f:
             f.write(link)
-        print("Пост успешно отправлен!")
+        print("Успешно отправлено!")
     else:
-        print(f"Ошибка Telegram: {r.text}")
+        print(f"Ошибка Telegram: {res.text}")
 
 if __name__ == "__main__":
     main()
