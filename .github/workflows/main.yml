@@ -41,7 +41,8 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          touch last_link.txt # Создаем файл, если его вдруг нет
+          # Эта строка создает пустой файл, если его нет, чтобы git не ругался
+          touch last_link.txt 
           git add last_link.txt
-          git commit -m "Update last news link" || echo "No changes"
+          git commit -m "Update last link" || echo "No changes to commit"
           git push
