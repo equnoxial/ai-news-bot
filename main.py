@@ -13,32 +13,24 @@ TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 client = genai.Client(api_key=GEMINI_KEY)
 
 def get_ai_content(title):
+    model_name = "gemini-2.0-flash" 
     prompt = f"Напиши короткий пост для Telegram на русском про: {title}. В конце добавь IMAGE_PROMPT: [описание картинки на английском]"
     
-    # Список моделей для перебора (от самой простой к новой)
-    # Если одна не сработает, бот попробует следующую
-    models_to_try = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-8b",
-        "gemini-1.5-flash-latest",
-        "gemini-2.0-flash" 
-    ]
-
-    for model_name in models_to_try:
-        print(f"Пробую модель: {model_name}...")
-        try:
-            response = client.models.generate_content(
-                model=model_name, 
-                contents=prompt
-            )
+    try:
+        print(f"Пробую свежий ключ с моделью: {model_name}...")
+        response = client.models.generate_content(model=model_name, contents=prompt)
+        
+        if response.text:
+            print("Ура! ИИ ответил.")
             full_text = response.text
-            
-            # Если всё ок, возвращаем результат
-            print(f"Успех с моделью {model_name}!")
             if "IMAGE_PROMPT:" in full_text:
                 text, img_p = full_text.split("IMAGE_PROMPT:")
                 return text.strip(), img_p.strip()
             return full_text, "futuristic technology"
+            
+    except Exception as e:
+        print(f"Даже с новым ключом ошибка: {e}")
+        return title, "artificial intelligence"
             
         except Exception as e:
             # Если ошибка, пишем её и идем к следующей модели
