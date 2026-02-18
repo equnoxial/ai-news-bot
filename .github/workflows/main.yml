@@ -26,10 +26,10 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python main.py
 
-      - name: Save last link status
+     - name: Save last link status
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add last_link.txt
-          git commit -m "Update last news link" || echo "No changes to commit"
-          git push
+          git commit -m "Update last link" || exit 0
+          git push origin main
