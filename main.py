@@ -13,22 +13,17 @@ CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 client = genai.Client(api_key=API_KEY)
 
 def get_ai_content(title):
-    prompt = f"Напиши короткий пост для Telegram на русском языке про новость: {title}. В конце добавь IMAGE_PROMPT: [описание картинки на английском]"
+    prompt = f"Напиши пост для Telegram на русском про: {title}. В конце добавь IMAGE_PROMPT: [описание для картинки]"
     try:
-        # Прямое указание модели для нового SDK
+        # ОБРАТИ ВНИМАНИЕ: здесь нет models/ в начале названия
         response = client.models.generate_content(
-            model="gemini-1.5-flash",  # Попробуем самую новую модель 2.0
+            model="gemini-1.5-flash", 
             contents=prompt
         )
-        full_text = response.text
-        
-        if "IMAGE_PROMPT:" in full_text:
-            parts = full_text.split("IMAGE_PROMPT:")
-            return parts[0].strip(), parts[1].strip()
-        return full_text, "futuristic technology digital art"
+        return response.text, "technology"
     except Exception as e:
-        print(f"ОШИБКА GEMINI: {e}")
-        return title, "artificial intelligence"
+        print(f"ОШИБКА: {e}")
+        return title, "tech"
 
 def main():
     feed = feedparser.parse("https://techcrunch.com/category/artificial-intelligence/feed/")
