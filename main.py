@@ -3,17 +3,25 @@ import random
 import feedparser
 import requests
 
+# Секреты
+HF_TOKEN = os.getenv('HF_TOKEN')
 TG_TOKEN = os.getenv('TG_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
 def get_ai_text(title):
-    # Используем Mistral или Llama через бесплатный API
-    prompt = f"Перескажи эту новость кратко и интересно для Телеграм на русском языке: {title}"
+    print(f"Генерирую текст для: {title}")
+    api_url = "https://api-inference.huggingface.co/models/Mistral-7B-Instruct-v0.3"
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    
+    prompt = f"<s>[INST] Напиши короткий и хайповый пост для Телеграм на русском языке на основе этой новости: {title}. Используй эмодзи. [/INST]"
+    
     try:
-        # Прямой запрос к API без сложных библиотек
-        return f"🤖 *AI NEWS*\n\n{title}", "tech artificial intelligence"
+        response = requests.post(api_url, headers=headers, json={"inputs": prompt, "parameters": {"max_new_tokens": 250}})
+        result = response.json()
+        text = result[0]['generated_text'].split("[/INST]")[-1].strip()
+        return text
     except:
-        return title, "technology"
+        return f"🤖 *Новость ИИ*\n\n{title}"
 
 def main():
     feed = feedparser.parse("https://techcrunch.com/category/artificial-intelligence/feed/")
@@ -23,20 +31,22 @@ def main():
     if os.path.exists("last_link.txt"):
         with open("last_link.txt", "r") as f:
             if f.read().strip() == entry.link:
+                print("Новых новостей нет.")
                 return
 
-    # Генерируем картинку (это работает всегда)
-    img_url = f"https://pollinations.ai/p/{entry.title.replace(' ', '%20')}?width=1024&height=1024&seed={random.randint(1,999)}&model=flux"
+    # Текст и картинка
+    post_text = get_ai_text(entry.title)
+    # Используем проверенный генератор картинок
+    img_url = f"https://image.pollinations.ai/prompt/{entry.title.replace(' ', '%20')}?width=1080&height=1080&nologo=true"
     
-    # Отправка
-    caption = f"🤖 *НОВОСТЬ ИИ*\n\n{entry.title}\n\n[Читать оригинал]({entry.link})"
+    caption = f"{post_text}\n\n[Читать оригинал]({entry.link})"
     
     r = requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto", 
                       data={"chat_id": CHAT_ID, "photo": img_url, "caption": caption, "parse_mode": "Markdown"})
     
     if r.status_code == 200:
         with open("last_link.txt", "w") as f: f.write(entry.link)
-        print("ПОБЕДА! Пост ушел.")
+        print("ПОСТ ОПУБЛИКОВАН!")
 
 if __name__ == "__main__":
     main()
