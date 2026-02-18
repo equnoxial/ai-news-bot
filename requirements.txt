@@ -1,3 +1,2 @@
-google-genai==0.4.0
 feedparser==6.0.11
 requests==2.32.3
