@@ -1,7 +1,7 @@
 name: build
 on:
   schedule:
-    - cron: '0 9 * * *' # Время в UTC (9:00 UTC = 12:00 МСК)
+    - cron: '0 8,9,10,12,13,15,16 * * *' # Время в UTC (9:00 UTC = 12:00 МСК)
   workflow_dispatch: # Чтобы можно было запустить вручную
 
 jobs:
