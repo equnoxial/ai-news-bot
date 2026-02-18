@@ -31,16 +31,6 @@ def get_ai_content(title):
     except Exception as e:
         print(f"Даже с новым ключом ошибка: {e}")
         return title, "artificial intelligence"
-            
-        except Exception as e:
-            # Если ошибка, пишем её и идем к следующей модели
-            print(f"Не вышло с {model_name}: {e}")
-            time.sleep(1) # Небольшая пауза перед следующей попыткой
-            continue
-
-    # Если вообще ни одна не сработала
-    print("ВСЕ МОДЕЛИ ОТКАЗАЛИ.")
-    return title, "artificial intelligence"
 
 def main():
     # 1. Получаем новость
