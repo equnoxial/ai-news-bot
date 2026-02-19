@@ -5,32 +5,28 @@ TG_TOKEN = os.getenv('TG_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
 def get_ai_text(title):
-    if not GROQ_KEY: return None
+    if not GROQ_KEY:
+        print("--- [ОШИБКА] Нет ключа Groq! ---")
+        return None
+    
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"}
     
-    # Используем тройные кавычки для многострочного текста, чтобы не было SyntaxError
-    prompt = f"""Напиши крутой пост для Telegram про новость: {title}.
-    Сделай его живым и интересным.
-    
-    Структура поста:
-    1. Краткий кликбейтный заголовок с парой эмодзи.
-    2. Основная суть новости (4-6 предложений) понятным языком.
-    3. Риторический вопрос (например: 'А вы что думаете?', 'Попробуете?') в конце.
-    
-    Пиши на русском. Используй Markdown для оформления."""
+    # Тот самый промпт, который дал крутой результат
+    prompt = f"""Напиши захватывающий пост для Telegram про новость: {title}.
+    Используй структуру:
+    1. Интригующий заголовок с эмодзи.
+    2. Разбор сути (3-5 предложений) — почему это важно для будущего?
+    3. Призыв к обсуждению в конце.
+    Пиши на русском в профессиональном, но живом стиле. Используй Markdown."""
 
-    data = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.7
-    }
-    
     try:
-        r = requests.post(url, headers=headers, json=data, timeout=25)
+        r = requests.post(url, headers=headers, json={"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}], "temperature": 0.7}, timeout=25)
         if r.status_code == 200:
             return r.json()['choices'][0]['message']['content'].strip()
-    except: pass
+        print(f"--- [ОШИБКА ИИ] Код: {r.status_code} ---")
+    except Exception as e:
+        print(f"--- [ОШИБКА СЕТИ] {e} ---")
     return None
 
 def main():
@@ -40,34 +36,41 @@ def main():
     
     if os.path.exists("last_link.txt"):
         with open("last_link.txt", "r") as f:
-            if f.read().strip() == entry.link: return
+            if f.read().strip() == entry.link:
+                print("--- Новость уже была ---")
+                return
 
     ai_text = get_ai_text(entry.title)
-    post_text = ai_text if ai_text else f"🔥 *{entry.title}*\n\nСвежие новости технологий уже здесь!"
+    post_text = ai_text if ai_text else f"🔥 *{entry.title}*"
 
-    # Улучшенная генерация картинки: берем ключевые слова из заголовка
-    # Ограничиваем длину и убираем лишние символы
-    words = [w for w in entry.title.split() if len(w) > 3][:5]
-    img_tags = "_".join(words)
-    img_url = f"https://image.pollinations.ai/prompt/cyber_digital_art_{img_tags}?width=1024&height=1024&seed={random.randint(1,999)}&nologo=true"
+    # КАПКАН НА КАРТИНКУ: Делаем максимально простой запрос
+    # Оставляем только буквы и берем первые 5 слов
+    clean_words = "".join(c for c in entry.title if c.isalnum() or c == " ").split()
+    img_tags = "_".join(clean_words[:5])
+    img_url = f"https://image.pollinations.ai/prompt/cyber_tech_art_{img_tags}?width=1024&height=1024&seed={random.randint(1,999)}&nologo=true"
     
     photo_sent = False
     try:
+        print(f"--- Пробую скачать картинку: {img_tags} ---")
         img_res = requests.get(img_url, timeout=30)
-        if img_res.status_code == 200 and len(img_res.content) > 1000:
+        if img_res.status_code == 200 and len(img_res.content) > 2000:
             with open('p.jpg', 'wb') as f: f.write(img_res.content)
             with open('p.jpg', 'rb') as photo:
-                r_tg = requests.post(
-                    f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
+                r_tg = requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
                     data={"chat_id": CHAT_ID, "caption": post_text, "parse_mode": "Markdown"},
-                    files={"photo": photo}
-                )
-                if r_tg.status_code == 200: photo_sent = True
-    except: pass
+                    files={"photo": photo})
+                if r_tg.status_code == 200: 
+                    photo_sent = True
+                    print("--- Пост с ФОТО отправлен! ---")
+        else:
+            print(f"--- [ОШИБКА ФОТО] Размер: {len(img_res.content)} байт ---")
+    except Exception as e:
+        print(f"--- [ОШИБКА ТЕЛЕГРАМА] {e} ---")
 
     if not photo_sent:
         requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage", 
                      data={"chat_id": CHAT_ID, "text": post_text, "parse_mode": "Markdown"})
+        print("--- Отправлен только ТЕКСТ ---")
 
     with open("last_link.txt", "w") as f: f.write(entry.link)
 
