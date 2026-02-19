@@ -62,8 +62,9 @@ def generate_image(img_prompt: str) -> Optional[str]:
         print("HF_TOKEN не задан. Картинка сгенерирована не будет.")
         return None
 
+    # Новый роутер Hugging Face (вместо api-inference.huggingface.co)
     api_url = (
-        "https://api-inference.huggingface.co/models/"
+        "https://router.huggingface.co/"
         "stabilityai/stable-diffusion-3.5-large-turbo"
     )
     headers = {"Authorization": f"Bearer {HF_TOKEN}"}
@@ -98,39 +99,26 @@ def generate_image(img_prompt: str) -> Optional[str]:
         return None
 
 
-def send_telegram_photo_or_text(text: str, img_path: Optional[str]) -> None:
+def send_telegram_photo(text: str, img_path: str) -> None:
     """
-    Если есть картинка — отправляет фото с подписью.
-    Иначе — просто текстовое сообщение.
+    Отправляет фото с подписью в Telegram.
     """
     if not TG_TOKEN or not CHAT_ID:
         print("TG_TOKEN или TELEGRAM_CHAT_ID не заданы. Нечего отправлять.")
         return
 
-    if img_path and os.path.exists(img_path):
-        with open(img_path, "rb") as photo:
-            resp = requests.post(
-                f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
-                data={
-                    "chat_id": CHAT_ID,
-                    "caption": text,
-                    "parse_mode": "Markdown",
-                },
-                files={"photo": photo},
-                timeout=20,
-            )
-        print("Ответ Telegram (sendPhoto):", resp.status_code, resp.text[:200])
-    else:
+    with open(img_path, "rb") as photo:
         resp = requests.post(
-            f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+            f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
             data={
                 "chat_id": CHAT_ID,
-                "text": text,
+                "caption": text,
                 "parse_mode": "Markdown",
             },
+            files={"photo": photo},
             timeout=20,
         )
-        print("Ответ Telegram (sendMessage):", resp.status_code, resp.text[:200])
+    print("Ответ Telegram (sendPhoto):", resp.status_code, resp.text[:200])
 
 
 def main() -> None:
@@ -161,20 +149,26 @@ def main() -> None:
     if not post_text:
         print("Не удалось сгенерировать текст поста. Выход.")
         return
+    if not img_prompt:
+        print("Не удалось получить промпт для картинки. Ничего не отправляем.")
+        return
 
-    # Добавляем ссылку в текст, чтобы она была видна в Telegram
-    full_text = f"{post_text}\n\nИсточник: {entry.link}"
+    full_text = post_text  # без "Источник"
 
-    img_path: Optional[str] = None
-    if img_prompt:
-        print("Промпт для картинки:", img_prompt)
-        img_path = generate_image(img_prompt)
-    else:
-        print("Промпт для картинки не получен. Отправлю только текст.")
+    print("Промпт для картинки:", img_prompt)
+    img_path = generate_image(img_prompt)
+    if not img_path:
+        print("Картинка не сгенерировалась. Ничего не отправляем и ссылку не сохраняем.")
+        return
 
-    send_telegram_photo_or_text(full_text, img_path)
+    if not os.path.exists(img_path):
+        print("Файл с картинкой не найден. Ничего не отправляем.")
+        return
 
-    # Сохраняем ссылку только при успехе отправки
+    # Отправляем ТОЛЬКО если есть и текст, и картинка
+    send_telegram_photo(full_text, img_path)
+
+    # Сохраняем ссылку только при успешной попытке отправки
     with open("last_link.txt", "w", encoding="utf-8") as f:
         f.write(entry.link)
     print("Пост обработан и ссылка сохранена.")
