@@ -58,12 +58,13 @@ def generate_image(img_prompt: str) -> Optional[str]:
         return None
 
     try:
-        client = InferenceClient(provider="auto", api_key=HF_TOKEN)
+        # без provider="auto" — провайдера задаём в самом вызове
+        client = InferenceClient(api_key=HF_TOKEN)
 
-        # output is a PIL.Image (через huggingface_hub)
         image = client.text_to_image(
             img_prompt,
             model="stabilityai/stable-diffusion-3.5-large-turbo",
+            provider="hf-inference",  # один из доступных: fal-ai, hf-inference, replicate, sambanova, together
         )
 
         img_path = "p.jpg"
