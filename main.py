@@ -3,8 +3,6 @@ import feedparser
 import requests
 from typing import Optional, Tuple
 
-from huggingface_hub import InferenceClient
-
 
 # КЛЮЧИ
 GROQ_KEY = os.getenv("GROQ_API_KEY")
@@ -53,26 +51,45 @@ def get_ai_content(title: str) -> Tuple[Optional[str], Optional[str]]:
 
 
 def generate_image(img_prompt: str) -> Optional[str]:
+    """
+    Генерация картинки через новый router.huggingface.co.
+    """
     if not HF_TOKEN:
         print("HF_TOKEN не задан. Выход.")
         return None
 
-    try:
-        # без provider="auto" — провайдера задаём в самом вызове
-        client = InferenceClient(api_key=HF_TOKEN)
+    api_url = (
+        "https://router.huggingface.co/"
+        "hf-inference/models/stabilityai/stable-diffusion-3.5-large-turbo"
+    )
+    headers = {
+        "Authorization": f"Bearer {HF_TOKEN}",
+        "Content-Type": "application/json",
+    }
 
-        image = client.text_to_image(
-            img_prompt,
-            model="stabilityai/stable-diffusion-3.5-large-turbo",
-            provider="hf-inference",  # один из доступных: fal-ai, hf-inference, replicate, sambanova, together
+    try:
+        resp = requests.post(
+            api_url,
+            headers=headers,
+            json={"inputs": img_prompt},
+            timeout=60,
         )
+        if resp.status_code != 200:
+            print("Ошибка Hugging Face:", resp.status_code, resp.text[:500])
+            return None
+
+        if len(resp.content) < 1000:
+            print("Ответ Hugging Face слишком маленький, похоже, не картинка.")
+            return None
 
         img_path = "p.jpg"
-        image.save(img_path, format="JPEG", quality=95)
+        with open(img_path, "wb") as f:
+            f.write(resp.content)
+
         print("Картинка сохранена:", img_path)
         return img_path
     except Exception as e:
-        print(f"Ошибка генерации картинки (HF InferenceClient): {e}")
+        print(f"Ошибка генерации картинки через router.huggingface.co: {e}")
         return None
 
 
