@@ -1,55 +1,113 @@
 import os, random, feedparser, requests, urllib.parse
 
-# Берем ключи
+# Капкан №1: Проверка окружения
 GROQ_KEY = os.getenv('GROQ_API_KEY')
 TG_TOKEN = os.getenv('TG_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-def get_ai_text(title):
-    # ПРОВЕРКА КЛЮЧА (только для отладки)
-    if not GROQ_KEY:
-        print("ОШИБКА: GitHub вообще не видит переменную GROQ_API_KEY!")
-        return None
-    print(f"Ключ найден, начинается на: {GROQ_KEY[:4]}...")
+print("--- [DEBUG] ПРОВЕРКА КЛЮЧЕЙ ---")
+print(f"TG_TOKEN: {'✅ Найдено' if TG_TOKEN else '❌ ПУСТО'}")
+print(f"CHAT_ID: {'✅ Найдено' if CHAT_ID else '❌ ПУСТО'}")
+print(f"GROQ_KEY: {'✅ Найдено (' + GROQ_KEY[:5] + '...)' if GROQ_KEY else '❌ ПУСТО'}")
 
+def get_ai_text(title):
+    if not GROQ_KEY:
+        print("--- [DEBUG] ОШИБКА: Groq ключ не дошел до кода! ---")
+        return None
+        
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"}
     data = {
         "model": "llama-3.3-70b-versatile",
-        "messages": [{"role": "user", "content": f"Напиши пост для Телеграм на русском (2 предложения) про это: {title}. Добавь эмодзи."}]
+        "messages": [{"role": "user", "content": f"Напиши пост для Телеграм на русском (2 предложения) про новость: {title}. Добавь 2 эмодзи."}]
     }
     
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=20)
-        if response.status_code == 200:
-            return response.json()['choices'][0]['message']['content'].strip()
-        print(f"Groq всё еще выдает ошибку {response.status_code}. Проверь валидность ключа в консоли Groq!")
+        print(f"--- [DEBUG] ОТПРАВЛЯЮ ЗАПРОС К GROQ ДЛЯ: {title[:30]}... ---")
+        r = requests.post(url, headers=headers, json=data, timeout=25)
+        
+        # Капкан №2: Анализ ответа ИИ
+        print(f"--- [DEBUG] ОТВЕТ GROQ (Status: {r.status_code}) ---")
+        if r.status_code == 200:
+            res_json = r.json()
+            content = res_json['choices'][0]['message']['content'].strip()
+            print(f"--- [DEBUG] ТЕКСТ ОТ ИИ: {content} ---")
+            return content
+        else:
+            print(f"--- [DEBUG] RAW ERROR FROM GROQ: {r.text} ---")
     except Exception as e:
-        print(f"Ошибка сети: {e}")
+        print(f"--- [DEBUG] ОШИБКА СЕТИ ПРИ ЗАПРОСЕ К ИИ: {e} ---")
+    
     return None
 
 def main():
     feed = feedparser.parse("https://techcrunch.com/category/artificial-intelligence/feed/")
-    if not feed.entries: return
-    entry = feed.entries[0]
+    if not feed.entries: 
+        print("--- [DEBUG] Лента новостей пуста ---")
+        return
     
-    # Чтобы бот сработал, даже если новость старая (для теста)
-    print(f"Обрабатываю новость: {entry.title}")
+    entry = feed.entries[0]
+    print(f"--- [DEBUG] ПОСЛЕДНЯЯ НОВОСТЬ: {entry.title} ---")
 
+    # Проверка дубликата
+    if os.path.exists("last_link.txt"):
+        with open("last_link.txt", "r") as f:
+            if f.read().strip() == entry.link:
+                print("--- [DEBUG] Новость уже была опубликована. Выход. ---")
+                return
+
+    # Получаем текст
     ai_text = get_ai_text(entry.title)
     
-    if ai_text:
-        post_text = ai_text
+    # Капкан №3: Если ИИ не ответил, используем заголовок, но помечаем это
+    if not ai_text:
+        print("--- [DEBUG] ИИ не дал текст, использую запасной вариант (заголовок) ---")
+        post_text = f"🤖 *НОВОСТЬ ИИ*\n\n{entry.title}"
     else:
-        # Если Groq выдал 401, мы попадем сюда
-        post_text = f"🤖 *НОВОСТЬ ИИ (БЕЗ ОПИСАНИЯ)*\n\n{entry.title}"
+        post_text = ai_text
 
-    # Отправка только текста для чистоты эксперимента
-    r = requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage", 
-                     data={"chat_id": CHAT_ID, "text": post_text, "parse_mode": "Markdown"})
+    # Работа с картинкой
+    img_prompt = urllib.parse.quote(f"futuristic technology {entry.title[:50]}")
+    img_url = f"https://image.pollinations.ai/prompt/{img_prompt}?width=1024&height=1024&seed={random.randint(1,1000)}"
     
-    if r.status_code == 200:
-        print("Пост отправлен в Telegram!")
+    print(f"--- [DEBUG] ПРОБУЮ СКАЧАТЬ КАРТИНКУ: {img_url} ---")
+    
+    photo_sent = False
+    try:
+        img_res = requests.get(img_url, timeout=30)
+        print(f"--- [DEBUG] СТАТУС КАРТИНКИ: {img_res.status_code}, РАЗМЕР: {len(img_res.content)} байт ---")
+        
+        if img_res.status_code == 200 and len(img_res.content) > 5000:
+            with open('debug_photo.jpg', 'wb') as f:
+                f.write(img_res.content)
+            
+            print("--- [DEBUG] ОТПРАВЛЯЮ ФОТО В ТЕЛЕГРАМ ---")
+            with open('debug_photo.jpg', 'rb') as photo:
+                r_tg = requests.post(
+                    f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
+                    data={"chat_id": CHAT_ID, "caption": post_text, "parse_mode": "Markdown"},
+                    files={"photo": photo}
+                )
+                print(f"--- [DEBUG] ОТВЕТ ТЕЛЕГРАМА (ФОТО): {r_tg.text} ---")
+                if r_tg.status_code == 200: photo_sent = True
+        else:
+            print("--- [DEBUG] Картинка слишком маленькая или битая ---")
+    except Exception as e:
+        print(f"--- [DEBUG] СБОЙ ПРИ ОБРАБОТКЕ КАРТИНКИ: {e} ---")
 
-if __name__ == "__main__":
+    # Если фото не ушло — шлем текст
+    if not photo_sent:
+        print("--- [DEBUG] ОТПРАВЛЯЮ ТОЛЬКО ТЕКСТ (ПЛАН Б) ---")
+r_txt = requests.post(
+            f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+            data={"chat_id": CHAT_ID, "text": post_text, "parse_mode": "Markdown"}
+        )
+        print(f"--- [DEBUG] ОТВЕТ ТЕЛЕГРАМА (ТЕКСТ): {r_txt.text} ---")
+
+    # Сохраняем ссылку
+    with open("last_link.txt", "w") as f:
+        f.write(entry.link)
+    print("--- [DEBUG] РАБОТА ЗАВЕРШЕНА ---")
+
+if name == "__main__":
     main()
