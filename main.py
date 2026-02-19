@@ -1,6 +1,7 @@
 import os
 import feedparser
 import requests
+from typing import Optional, Tuple
 
 # КЛЮЧИ
 GROQ_KEY = os.getenv("GROQ_API_KEY")
@@ -9,7 +10,7 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 HF_TOKEN = os.getenv("HF_TOKEN")
 
 
-def get_ai_content(title: str):
+def get_ai_content(title: str) -> Tuple[Optional[str], Optional[str]]:
     if not GROQ_KEY:
         print("GROQ_API_KEY не задан. Пост не будет сгенерирован.")
         return None, None
@@ -52,7 +53,7 @@ def get_ai_content(title: str):
     return None, None
 
 
-def generate_image(img_prompt: str) -> str | None:
+def generate_image(img_prompt: str) -> Optional[str]:
     """
     Генерирует картинку через Hugging Face.
     Возвращает путь к файлу или None, если не удалось.
@@ -82,7 +83,6 @@ def generate_image(img_prompt: str) -> str | None:
             )
             return None
 
-        # Проверка на очень маленький ответ (обычно ошибка)
         if len(response.content) < 1000:
             print("Ответ Hugging Face слишком маленький, похоже, не картинка.")
             return None
@@ -98,7 +98,7 @@ def generate_image(img_prompt: str) -> str | None:
         return None
 
 
-def send_telegram_photo_or_text(text: str, img_path: str | None):
+def send_telegram_photo_or_text(text: str, img_path: Optional[str]) -> None:
     """
     Если есть картинка — отправляет фото с подписью.
     Иначе — просто текстовое сообщение.
@@ -133,7 +133,7 @@ def send_telegram_photo_or_text(text: str, img_path: str | None):
         print("Ответ Telegram (sendMessage):", resp.status_code, resp.text[:200])
 
 
-def main():
+def main() -> None:
     # Проверка существования файла, чтобы GitHub не выдавал ошибку 128
     if not os.path.exists("last_link.txt"):
         with open("last_link.txt", "w", encoding="utf-8") as f:
@@ -165,7 +165,7 @@ def main():
     # Добавляем ссылку в текст, чтобы она была видна в Telegram
     full_text = f"{post_text}\n\nИсточник: {entry.link}"
 
-    img_path = None
+    img_path: Optional[str] = None
     if img_prompt:
         print("Промпт для картинки:", img_prompt)
         img_path = generate_image(img_prompt)
