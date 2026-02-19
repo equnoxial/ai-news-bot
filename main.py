@@ -2,13 +2,13 @@ import os
 import feedparser
 import requests
 from typing import Optional, Tuple
+from urllib.parse import quote
 
 
-# КЛЮЧИ
+# КЛЮЧИ (HF_TOKEN больше не нужен для картинок)
 GROQ_KEY = os.getenv("GROQ_API_KEY")
 TG_TOKEN = os.getenv("TG_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-HF_TOKEN = os.getenv("HF_TOKEN")
 
 
 def get_ai_content(title: str) -> Tuple[Optional[str], Optional[str]]:
@@ -52,34 +52,18 @@ def get_ai_content(title: str) -> Tuple[Optional[str], Optional[str]]:
 
 def generate_image(img_prompt: str) -> Optional[str]:
     """
-    Генерация картинки через новый router.huggingface.co.
+    Генерация картинки через Pollinations.ai — бесплатно, без API ключа.
     """
-    if not HF_TOKEN:
-        print("HF_TOKEN не задан. Выход.")
-        return None
-
-    api_url = (
-        "https://router.huggingface.co/"
-        "hf-inference/models/stabilityai/stable-diffusion-3.5-large-turbo"
-    )
-    headers = {
-        "Authorization": f"Bearer {HF_TOKEN}",
-        "Content-Type": "application/json",
-    }
-
     try:
-        resp = requests.post(
-            api_url,
-            headers=headers,
-            json={"inputs": img_prompt},
-            timeout=60,
-        )
+        encoded = quote(img_prompt.strip(), safe="")
+        url = f"https://image.pollinations.ai/prompt/{encoded}"
+        resp = requests.get(url, timeout=90, stream=True)
         if resp.status_code != 200:
-            print("Ошибка Hugging Face:", resp.status_code, resp.text[:500])
+            print("Ошибка Pollinations:", resp.status_code, resp.text[:300])
             return None
 
-        if len(resp.content) < 1000:
-            print("Ответ Hugging Face слишком маленький, похоже, не картинка.")
+        if len(resp.content) < 500:
+            print("Ответ Pollinations слишком маленький, похоже, не картинка.")
             return None
 
         img_path = "p.jpg"
@@ -89,7 +73,7 @@ def generate_image(img_prompt: str) -> Optional[str]:
         print("Картинка сохранена:", img_path)
         return img_path
     except Exception as e:
-        print(f"Ошибка генерации картинки через router.huggingface.co: {e}")
+        print(f"Ошибка генерации картинки (Pollinations): {e}")
         return None
 
 
