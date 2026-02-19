@@ -1,48 +1,37 @@
 name: build
-
 on:
-  # Расписание: каждый день в 10:00 по Москве
   schedule:
-    - cron: '0 7 * * *'
-  # Кнопка для ручного запуска
-  workflow_dispatch: 
+    - cron: '0 * * * *' # Запуск каждый час
+  workflow_dispatch: # Возможность запустить вручную
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Права для GitHub Actions на запись
-    permissions:
-      contents: write
-
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          # Сохраняем учетные данные для последующего коммита
-          persist-credentials: true
+        uses: actions/checkout@v2
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v2
         with:
           python-version: '3.9'
 
       - name: Install dependencies
         run: |
-          pip install feedparser requests
+          pip install requests feedparser
 
       - name: Run bot
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}  # ПРОВЕРЬ ЭТУ СТРОКУ!
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }} # ОБЯЗАТЕЛЬНО ДОБАВИТЬ ЭТО
         run: python main.py
 
       - name: Save last link status
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          # Эта строка создает пустой файл, если его нет, чтобы git не ругался
-          touch last_link.txt 
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
           git add last_link.txt
-          git commit -m "Update last link" || echo "No changes to commit"
+          git commit -m "Update last link" || exit 0
           git push
