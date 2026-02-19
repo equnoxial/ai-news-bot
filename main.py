@@ -1,14 +1,15 @@
 import os
+import time
 import feedparser
 import requests
 from typing import Optional, Tuple
-from urllib.parse import quote
 
 
-# КЛЮЧИ (HF_TOKEN больше не нужен для картинок)
+# КЛЮЧИ
 GROQ_KEY = os.getenv("GROQ_API_KEY")
 TG_TOKEN = os.getenv("TG_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+REPLICATE_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 
 
 def get_ai_content(title: str) -> Tuple[Optional[str], Optional[str]]:
@@ -52,28 +53,69 @@ def get_ai_content(title: str) -> Tuple[Optional[str], Optional[str]]:
 
 def generate_image(img_prompt: str) -> Optional[str]:
     """
-    Генерация картинки через Pollinations.ai — бесплатно, без API ключа.
+    Генерация картинки через Replicate (FLUX Schnell).
     """
+    if not REPLICATE_TOKEN:
+        print("REPLICATE_API_TOKEN не задан. Выход.")
+        return None
+
+    api_url = "https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions"
+    headers = {
+        "Authorization": f"Bearer {REPLICATE_TOKEN}",
+        "Content-Type": "application/json",
+        "Prefer": "wait=60",
+    }
+
     try:
-        encoded = quote(img_prompt.strip(), safe="")
-        url = f"https://image.pollinations.ai/prompt/{encoded}"
-        resp = requests.get(url, timeout=90, stream=True)
-        if resp.status_code != 200:
-            print("Ошибка Pollinations:", resp.status_code, resp.text[:300])
+        resp = requests.post(
+            api_url,
+            headers=headers,
+            json={"input": {"prompt": img_prompt}},
+            timeout=70,
+        )
+        if resp.status_code != 200 and resp.status_code != 201:
+            print("Ошибка Replicate:", resp.status_code, resp.text[:500])
             return None
 
-        if len(resp.content) < 500:
-            print("Ответ Pollinations слишком маленький, похоже, не картинка.")
+        data = resp.json()
+        status = data.get("status")
+        output = data.get("output")
+
+        if status != "succeeded":
+            print("Replicate не завершил генерацию:", status, str(output)[:200])
+            return None
+
+        if not output:
+            print("Replicate вернул пустой output.")
+            return None
+
+        # output может быть списком URL или строкой
+        if isinstance(output, list) and len(output) > 0:
+            img_url = output[0] if isinstance(output[0], str) else output[0].get("url")
+        elif isinstance(output, str):
+            img_url = output
+        else:
+            print("Неизвестный формат output Replicate:", type(output))
+            return None
+
+        if not img_url:
+            print("Не удалось получить URL картинки из Replicate.")
+            return None
+
+        # Скачиваем картинку
+        img_resp = requests.get(img_url, timeout=30)
+        if img_resp.status_code != 200:
+            print("Ошибка скачивания картинки:", img_resp.status_code)
             return None
 
         img_path = "p.jpg"
         with open(img_path, "wb") as f:
-            f.write(resp.content)
+            f.write(img_resp.content)
 
         print("Картинка сохранена:", img_path)
         return img_path
     except Exception as e:
-        print(f"Ошибка генерации картинки (Pollinations): {e}")
+        print(f"Ошибка генерации картинки (Replicate): {e}")
         return None
 
 
