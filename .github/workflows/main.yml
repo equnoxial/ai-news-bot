@@ -18,14 +18,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests feedparser
+          pip install -r requirements.txt
 
       - name: Run bot
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }} # ОБЯЗАТЕЛЬНО ДОБАВИТЬ ЭТО
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python main.py
 
       - name: Save last link status
