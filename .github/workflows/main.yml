@@ -2,7 +2,7 @@ name: build
 on:
   schedule:
     - cron: '0 * * * *' # Запуск каждый час
-  workflow_dispatch: # Возможность запустить вручную
+  workflow_dispatch: # Запуск вручную
 
 jobs:
   build:
@@ -25,7 +25,6 @@ jobs:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python main.py
 
       - name: Save last link status
