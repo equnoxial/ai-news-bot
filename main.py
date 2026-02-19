@@ -1,95 +1,65 @@
-import os, random, feedparser, requests, urllib.parse
+import os, random, feedparser, requests, io
 
-# 1. ЗАБИРАЕМ КЛЮЧИ (Капкан на проверку окружения)
+# КЛЮЧИ
 GROQ_KEY = os.getenv('GROQ_API_KEY')
 TG_TOKEN = os.getenv('TG_TOKEN')
 CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+HF_TOKEN = os.getenv('HF_TOKEN') # Новый секрет для стабильных картинок
 
 def get_ai_content(title):
-    if not GROQ_KEY:
-        print("--- [ОШИБКА] GitHub не видит GROQ_API_KEY! ---")
-        return None, None
-    
+    if not GROQ_KEY: return None, None
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"}
+    prompt = f"""Напиши крутой пост для Telegram канала про новость: {title}.
+    Сделай заголовок с эмодзи, разбор сути с интересом простыми словами (4-6 предложений).
+    Пиши на русском. Используй Markdown, отступы для каждого абзаца, выделения для некоторых ключевых словосочетаний или предложений."""
     
-    # Промпт для крутого текста и английских тегов для картинки
-    prompt = f"""Новость: {title}
-    1. Напиши пост для Telegram на русском (заголовок, 3-5 предложений, вопрос).
-    2. Напиши через разделитель '|||' короткий промпт для картинки (3-4 английских слова).
-    Пример: Текст поста... ||| robotic artificial intelligence"""
-
     try:
-        r = requests.post(url, headers=headers, json={
-            "model": "llama-3.3-70b-versatile",
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.6
-        }, timeout=25)
-        
+        r = requests.post(url, headers=headers, json={"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}]}, timeout=25)
         if r.status_code == 200:
             res = r.json()['choices'][0]['message']['content'].strip()
             if "|||" in res:
-                text, img_p = res.split("|||")
-                return text.strip(), img_p.strip()
-        print(f"--- [ОШИБКА ИИ] Код: {r.status_code}, Ответ: {r.text} ---")
-    except Exception as e:
-        print(f"--- [ОШИБКА СЕТИ ИИ] {e} ---")
+                return res.split("|||")[0].strip(), res.split("|||")[1].strip()
+    except: pass
     return None, None
 
 def main():
-    # Читаем ленту
     feed = feedparser.parse("https://techcrunch.com/category/artificial-intelligence/feed/")
     if not feed.entries: return
     entry = feed.entries[0]
-    
-    # Проверка на дубликаты
+
     if os.path.exists("last_link.txt"):
         with open("last_link.txt", "r") as f:
-            if f.read().strip() == entry.link:
-                print("--- Новость уже была опубликована ---")
-                return
+            if f.read().strip() == entry.link: return
 
-    # Получаем контент
-    print(f"--- Обработка новости: {entry.title} ---")
-    post_text, img_tags = get_ai_content(entry.title)
-    
-    if not post_text or not img_tags:
-        print("--- [ОТМЕНА] Не удалось получить текст или теги от ИИ ---")
-        return
+    post_text, img_prompt = get_ai_content(entry.title)
+    if not post_text or not img_prompt: return
 
-    # ГЕНЕРАЦИЯ КАРТИНКИ (Исправлено: /prompt/, знаки & и очистка текста)
-    img_tags_clean = "".join(c for c in img_tags if c.isalnum() or c == " ").replace(" ", "_")
-    img_url = f"https://image.pollinations.ai/prompt/cyberpunk_digital_art_{img_tags_clean}?width=1024&height=1024&nologo=true&seed={random.randint(1,999)}"
+    # НОВЫЙ ГЕНЕРАТОР: Hugging Face (намного стабильнее Pollinations)
+    print(f"--- Генерация картинки через Hugging Face: {img_prompt} ---")
+    API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-3.5-large-turbo"
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
     
     try:
-        print(f"--- Запрос картинки: {img_url} ---")
-        img_res = requests.get(img_url, timeout=30)
+        response = requests.post(API_URL, headers=headers, json={"inputs": img_prompt}, timeout=40)
         
-        # Капкан на размер: если 16 байт или статус не 200 — отменяем
-        if img_res.status_code == 200 and len(img_res.content) > 5000:
+        if response.status_code == 200 and len(response.content) > 10000:
             with open('p.jpg', 'wb') as f:
-                f.write(img_res.content)
+                f.write(response.content)
             
-            # Отправка в Telegram
             with open('p.jpg', 'rb') as photo:
-                r_tg = requests.post(
-                    f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
-                    data={"chat_id": CHAT_ID, "caption": post_text, "parse_mode": "Markdown"},
-                    files={"photo": photo}
-                )
+                r_tg = requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
+                                    data={"chat_id": CHAT_ID, "caption": post_text, "parse_mode": "Markdown"},
+                                    files={"photo": photo})
                 
                 if r_tg.status_code == 200:
-                    print("--- УСПЕХ: Пост опубликован! ---")
-                    with open("last_link.txt", "w") as f:
-                        f.write(entry.link)
+                    print("--- УСПЕХ: Пост отправлен! ---")
+                    with open("last_link.txt", "w") as f: f.write(entry.link)
                     return
-                else:
-                    print(f"--- [ОШИБКА TG] {r_tg.text} ---")
         else:
-            print(f"--- [ОТМЕНА] Картинка не прошла проверку (Размер: {len(img_res.content)} байт) ---")
-            
+            print(f"--- Ошибка генератора: {response.status_code}. Проверьте HF_TOKEN. ---")
     except Exception as e:
-        print(f"--- [КРИТИЧЕСКАЯ ОШИБКА] {e} ---")
+        print(f"--- Сбой: {e} ---")
 
 if __name__ == "__main__":
     main()
