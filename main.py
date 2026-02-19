@@ -1,28 +1,28 @@
 import os
-import time
+from typing import Optional
+
 import feedparser
 import requests
-from typing import Optional, Tuple
+from bs4 import BeautifulSoup
 
-
-# КЛЮЧИ
 GROQ_KEY = os.getenv("GROQ_API_KEY")
 TG_TOKEN = os.getenv("TG_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-REPLICATE_TOKEN = os.getenv("REPLICATE_API_TOKEN")
+
+UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/122 Safari/537.36"
 
 
-def get_ai_content(title: str) -> Tuple[Optional[str], Optional[str]]:
+def get_ai_post(title: str) -> Optional[str]:
     if not GROQ_KEY:
         print("GROQ_API_KEY не задан. Выход.")
-        return None, None
+        return None
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"}
     prompt = (
         f"Новость: {title}\n"
-        "1. Напиши захватывающий пост для Telegram (заголовок, 3-5 предложений, вопрос). Пиши на русском.\n"
-        "2. Через разделитель '|||' напиши 3-6 английских слов для описания картинки (без запятых)."
+        "Напиши пост для Telegram на русском: заголовок + 3-5 предложений + 1 вопрос в конце. "
+        "Без ссылок, без эмодзи, без хэштегов."
     )
 
     try:
@@ -37,105 +37,110 @@ def get_ai_content(title: str) -> Tuple[Optional[str], Optional[str]]:
         )
         if r.status_code != 200:
             print(f"Ошибка Groq: {r.status_code} {r.text[:500]}")
-            return None, None
-
-        res = r.json()["choices"][0]["message"]["content"].strip()
-        if "|||" not in res:
-            print("Ответ Groq без '|||':", res[:300])
-            return None, None
-
-        text_part, img_part = res.split("|||", 1)
-        return text_part.strip(), img_part.strip()
+            return None
+        return r.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(f"Исключение Groq: {e}")
-        return None, None
-
-
-def generate_image(img_prompt: str) -> Optional[str]:
-    """
-    Генерация картинки через Replicate (FLUX Schnell).
-    """
-    if not REPLICATE_TOKEN:
-        print("REPLICATE_API_TOKEN не задан. Выход.")
         return None
 
-    api_url = "https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions"
-    headers = {
-        "Authorization": f"Bearer {REPLICATE_TOKEN}",
-        "Content-Type": "application/json",
-        "Prefer": "wait=60",
-    }
+
+def _image_from_feed(entry) -> Optional[str]:
+    # Иногда RSS уже содержит картинку
+    try:
+        if hasattr(entry, "media_content") and entry.media_content:
+            url = entry.media_content[0].get("url")
+            if url:
+                return url
+    except Exception:
+        pass
 
     try:
-        resp = requests.post(
-            api_url,
-            headers=headers,
-            json={"input": {"prompt": img_prompt}},
-            timeout=70,
+        for link in getattr(entry, "links", []) or []:
+            if link.get("rel") == "enclosure" and str(link.get("type", "")).startswith("image/"):
+                return link.get("href")
+    except Exception:
+        pass
+
+    return None
+
+
+def get_article_image_url(article_url: str) -> Optional[str]:
+    try:
+        r = requests.get(article_url, headers={"User-Agent": UA}, timeout=25)
+        if r.status_code != 200:
+            print("Не удалось открыть страницу:", r.status_code)
+            return None
+
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        def meta(prop: str = None, name: str = None) -> Optional[str]:
+            if prop:
+                tag = soup.find("meta", attrs={"property": prop})
+                if tag and tag.get("content"):
+                    return tag["content"].strip()
+            if name:
+                tag = soup.find("meta", attrs={"name": name})
+                if tag and tag.get("content"):
+                    return tag["content"].strip()
+            return None
+
+        return (
+            meta(prop="og:image:secure_url")
+            or meta(prop="og:image")
+            or meta(name="twitter:image")
+            or meta(name="twitter:image:src")
         )
-        if resp.status_code != 200 and resp.status_code != 201:
-            print("Ошибка Replicate:", resp.status_code, resp.text[:500])
-            return None
-
-        data = resp.json()
-        status = data.get("status")
-        output = data.get("output")
-
-        if status != "succeeded":
-            print("Replicate не завершил генерацию:", status, str(output)[:200])
-            return None
-
-        if not output:
-            print("Replicate вернул пустой output.")
-            return None
-
-        # output может быть списком URL или строкой
-        if isinstance(output, list) and len(output) > 0:
-            img_url = output[0] if isinstance(output[0], str) else output[0].get("url")
-        elif isinstance(output, str):
-            img_url = output
-        else:
-            print("Неизвестный формат output Replicate:", type(output))
-            return None
-
-        if not img_url:
-            print("Не удалось получить URL картинки из Replicate.")
-            return None
-
-        # Скачиваем картинку
-        img_resp = requests.get(img_url, timeout=30)
-        if img_resp.status_code != 200:
-            print("Ошибка скачивания картинки:", img_resp.status_code)
-            return None
-
-        img_path = "p.jpg"
-        with open(img_path, "wb") as f:
-            f.write(img_resp.content)
-
-        print("Картинка сохранена:", img_path)
-        return img_path
     except Exception as e:
-        print(f"Ошибка генерации картинки (Replicate): {e}")
+        print("Ошибка парсинга страницы:", e)
         return None
 
 
-def send_telegram_photo(text: str, img_path: str) -> bool:
+def download_image(url: str) -> Optional[str]:
+    try:
+        r = requests.get(url, headers={"User-Agent": UA}, timeout=40)
+        if r.status_code != 200:
+            print("Не удалось скачать картинку:", r.status_code)
+            return None
+
+        ctype = (r.headers.get("content-type") or "").lower()
+        ext = ".jpg"
+        if "png" in ctype:
+            ext = ".png"
+        elif "webp" in ctype:
+            ext = ".webp"
+
+        path = "p" + ext
+        with open(path, "wb") as f:
+            f.write(r.content)
+
+        if len(r.content) < 1000:
+            print("Слишком маленький файл, похоже не картинка.")
+            return None
+
+        return path
+    except Exception as e:
+        print("Ошибка скачивания картинки:", e)
+        return None
+
+
+def send_telegram_photo(caption: str, img_path: str) -> bool:
     if not TG_TOKEN or not CHAT_ID:
-        print("TG_TOKEN или TELEGRAM_CHAT_ID не заданы. Выход.")
+        print("TG_TOKEN или TELEGRAM_CHAT_ID не заданы.")
         return False
 
     try:
         with open(img_path, "rb") as photo:
             resp = requests.post(
                 f"https://api.telegram.org/bot{TG_TOKEN}/sendPhoto",
-                data={"chat_id": CHAT_ID, "caption": text, "parse_mode": "Markdown"},
+                data={"chat_id": CHAT_ID, "caption": caption, "parse_mode": "Markdown"},
                 files={"photo": photo},
-                timeout=20,
+                timeout=25,
             )
-        print("Ответ Telegram (sendPhoto):", resp.status_code, resp.text[:200])
-        return resp.status_code == 200
+        ok = resp.status_code == 200 and resp.json().get("ok") is True
+        print("Ответ Telegram:", resp.status_code, resp.text[:200])
+        return ok
     except Exception as e:
-        print(f"Ошибка отправки в Telegram: {e}")
+        print("Ошибка отправки в Telegram:", e)
         return False
 
 
@@ -152,33 +157,40 @@ def main() -> None:
         return
 
     entry = feed.entries[0]
-    print("Заголовок новости:", entry.title)
-    print("Ссылка новости:", entry.link)
+    title = entry.title
+    link = entry.link
+
+    print("Заголовок новости:", title)
+    print("Ссылка новости:", link)
 
     with open("last_link.txt", "r", encoding="utf-8") as f:
-        last = f.read().strip()
-    if last == entry.link:
-        print("Новость уже была.")
+        if f.read().strip() == link:
+            print("Новость уже была.")
+            return
+
+    image_url = _image_from_feed(entry) or get_article_image_url(link)
+    if not image_url:
+        print("Не нашёл картинку новости. Ничего не отправляем и ссылку не сохраняем.")
         return
 
-    post_text, img_prompt = get_ai_content(entry.title)
-    if not post_text or not img_prompt:
-        print("Нет текста или промпта. Ничего не отправляем.")
+    print("URL картинки:", image_url)
+    img_path = download_image(image_url)
+    if not img_path:
+        print("Картинка не скачалась. Ничего не отправляем и ссылку не сохраняем.")
         return
 
-    print("Промпт для картинки:", img_prompt)
-    img_path = generate_image(img_prompt)
-    if not img_path or not os.path.exists(img_path):
-        print("Картинка не сгенерировалась. Ничего не отправляем и ссылку не сохраняем.")
+    post_text = get_ai_post(title)
+    if not post_text:
+        print("Текст не сгенерировался. Ничего не отправляем и ссылку не сохраняем.")
         return
 
-    ok = send_telegram_photo(post_text, img_path)
-    if not ok:
+    if not send_telegram_photo(post_text, img_path):
         print("Telegram не принял фото. Ссылку не сохраняем.")
         return
 
     with open("last_link.txt", "w", encoding="utf-8") as f:
-        f.write(entry.link)
+        f.write(link)
+
     print("Успех: пост опубликован и ссылка сохранена.")
 
 
