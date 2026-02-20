@@ -1,8 +1,8 @@
 name: build
 on:
   schedule:
-    - cron: '0 8,9,10,12,13,15,16,18 * * *'  # БЕЗ последнего *
-  workflow_dispatch:
+    - cron: '0 8,9,10,12,13,15,16,18 * * *'  # Автозапуск в указанные часы (UTC)
+  workflow_dispatch:  # Ручной запуск
 
 jobs:
   build:
