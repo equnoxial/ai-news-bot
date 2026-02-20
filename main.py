@@ -11,6 +11,8 @@ CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/122 Safari/537.36"
 
+CAPTION_MAX_LEN = 1024  # лимит Telegram для caption
+
 
 def get_ai_post(title: str) -> Optional[str]:
     if not GROQ_KEY:
@@ -21,8 +23,8 @@ def get_ai_post(title: str) -> Optional[str]:
     headers = {"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"}
     prompt = (
         f"Новость: {title}\n"
-        "Напиши пост для Telegram на русском: заголовок + 4-6 предложений + 1 риторический вопрос в конце в отдельном абзаце. "
-        "Без ссылок, можно немного эмодзи в начале 1-го предложения, без хэштегов, используй абзацы,выделения ключевых слов для телеграмм канала."
+        "Напиши пост для Telegram на русском: заголовок + 4-6 коротких простых предложений + 1 риторический вопрос в конце в отдельном абзаце. "
+        "Без ссылок, можно немного эмодзи в начале 1-го предложения, без хэштегов, используй абзацы, выделения ключевых слов для телеграмм канала."
     )
 
     try:
@@ -45,7 +47,6 @@ def get_ai_post(title: str) -> Optional[str]:
 
 
 def _image_from_feed(entry) -> Optional[str]:
-    # Иногда RSS уже содержит картинку
     try:
         if hasattr(entry, "media_content") and entry.media_content:
             url = entry.media_content[0].get("url")
@@ -127,6 +128,8 @@ def send_telegram_photo(caption: str, img_path: str) -> bool:
     if not TG_TOKEN or not CHAT_ID:
         print("TG_TOKEN или TELEGRAM_CHAT_ID не заданы.")
         return False
+
+    caption = caption[: CAPTION_MAX_LEN - 3] + "..." if len(caption) > CAPTION_MAX_LEN else caption
 
     try:
         with open(img_path, "rb") as photo:
