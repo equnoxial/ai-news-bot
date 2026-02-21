@@ -49,7 +49,7 @@ def get_ai_post(title):
     prompt = (
         f"Новость: {title}\n"
         "Напиши пост для Telegram на русском: заголовок + 4-6 коротких простых предложений + 1 риторический вопрос в конце в отдельном абзаце. "
-        "Без ссылок, можно немного эмодзи в начале 1-го предложения, без хэштегов, используй абзацы, выделения ключевых слов для телеграмм канала путем заключения данных слов или слова в две звездочки например: **Важно** или **необходимо**."
+        "Без ссылок, можно немного эмодзи в начале 1-го предложения, без хэштегов, используй абзацы, выделения ключевых слов для телеграмм канала."
     )
 
     try:
@@ -206,12 +206,14 @@ def fetch_newest_entry(posted_links):
 
 
 def main():
-    if os.path.exists("last_link.txt") and not os.path.exists(POSTED_FILE):
+    if os.path.exists("last_link.txt"):
         with open("last_link.txt", "r", encoding="utf-8") as f:
             old_link = f.read().strip()
         if old_link:
-            save_posted_link(old_link)
-        print("Мигрировал last_link.txt -> posted_links.txt")
+            posted = load_posted_links()
+            if old_link not in posted:
+                save_posted_link(old_link)
+                print(f"Мигрировал ссылку из last_link.txt: {old_link}")
 
     posted_links = load_posted_links()
 
