@@ -1,10 +1,9 @@
-  import os
-  from time import mktime
-  from typing import Optional
+import os
+from typing import Optional
 
-  import feedparser
-  import requests
-  from bs4 import BeautifulSoup
+import feedparser
+import requests
+from bs4 import BeautifulSoup
 
   GROQ_KEY = os.getenv("GROQ_API_KEY")
   TG_TOKEN = os.getenv("TG_TOKEN")
