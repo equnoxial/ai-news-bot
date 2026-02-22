@@ -233,7 +233,7 @@ def fetch_sorted_entries(posted_links):
 
 
 def main():
-    delay = random.randint(0, 50 * 60)  # 0-50 минут в секундах
+    delay = random.randint(4 * 60, 15 * 60)  # 0-50 минут в секундах
     print(f"Рандомная задержка: {delay // 60} мин {delay % 60} сек")
     time.sleep(delay)
 
