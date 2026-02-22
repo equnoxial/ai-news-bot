@@ -1,4 +1,7 @@
+import difflib
 import os
+import random
+import time
 from time import mktime
 from typing import Optional
 
@@ -15,6 +18,8 @@ UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/122 Safari/537.3
 CAPTION_MAX_LEN = 1024
 
 POSTED_FILE = "posted_links.txt"
+POSTED_TEXTS_FILE = "posted_texts.txt"
+SIMILARITY_THRESHOLD = 0.55
 
 RSS_FEEDS = [
     "https://techcrunch.com/category/artificial-intelligence/feed/",
@@ -37,6 +42,30 @@ def load_posted_links():
 def save_posted_link(link):
     with open(POSTED_FILE, "a", encoding="utf-8") as f:
         f.write(link + "\n")
+
+
+def load_posted_texts():
+    if not os.path.exists(POSTED_TEXTS_FILE):
+        return []
+    with open(POSTED_TEXTS_FILE, "r", encoding="utf-8") as f:
+        content = f.read()
+    if not content.strip():
+        return []
+    return [t.strip() for t in content.split("---") if t.strip()]
+
+
+def save_posted_text(text):
+    with open(POSTED_TEXTS_FILE, "a", encoding="utf-8") as f:
+        f.write(text + "\n---\n")
+
+
+def is_duplicate(text, posted_texts):
+    for prev in posted_texts:
+        ratio = difflib.SequenceMatcher(None, text, prev).ratio()
+        if ratio > SIMILARITY_THRESHOLD:
+            print(f"Обнаружен дубликат (схожесть {ratio:.2f})")
+            return True
+    return False
 
 
 def get_ai_post(title):
@@ -172,9 +201,8 @@ def send_telegram_photo(caption, img_path):
         return False
 
 
-def fetch_newest_entry(posted_links):
-    best_entry = None
-    best_time = 0
+def fetch_sorted_entries(posted_links):
+    entries_with_time = []
 
     for feed_url in RSS_FEEDS:
         print(f"Читаю RSS: {feed_url}")
@@ -198,14 +226,17 @@ def fetch_newest_entry(posted_links):
             except Exception:
                 continue
 
-            if t > best_time:
-                best_time = t
-                best_entry = entry
+            entries_with_time.append((t, entry))
 
-    return best_entry
+    entries_with_time.sort(key=lambda x: x[0], reverse=True)
+    return [entry for _, entry in entries_with_time]
 
 
 def main():
+    delay = random.randint(0, 50 * 60)  # 0-50 минут в секундах
+    print(f"Рандомная задержка: {delay // 60} мин {delay % 60} сек")
+    time.sleep(delay)
+
     if os.path.exists("last_link.txt"):
         with open("last_link.txt", "r", encoding="utf-8") as f:
             old_link = f.read().strip()
@@ -216,40 +247,52 @@ def main():
                 print(f"Мигрировал ссылку из last_link.txt: {old_link}")
 
     posted_links = load_posted_links()
+    entries = fetch_sorted_entries(posted_links)
 
-    entry = fetch_newest_entry(posted_links)
-    if not entry:
+    if not entries:
         print("Нет новых записей ни в одном фиде.")
         return
 
-    title = entry.title
-    link = entry.link
+    posted_texts = load_posted_texts()
 
-    print(f"Самая свежая новость: {title}")
-    print(f"Ссылка: {link}")
+    for entry in entries:
+        title = entry.title
+        link = entry.link
 
-    image_url = _image_from_feed(entry) or get_article_image_url(link)
-    if not image_url:
-        print("Не нашёл картинку новости. Ничего не отправляем и ссылку не сохраняем.")
+        print(f"Пробуем новость: {title}")
+        print(f"Ссылка: {link}")
+
+        image_url = _image_from_feed(entry) or get_article_image_url(link)
+        if not image_url:
+            print("Не нашёл картинку, пробуем следующую новость.")
+            continue
+
+        print("URL картинки:", image_url)
+        img_path = download_image(image_url)
+        if not img_path:
+            print("Картинка не скачалась, пробуем следующую новость.")
+            continue
+
+        post_text = get_ai_post(title)
+        if not post_text:
+            print("Текст не сгенерировался, пробуем следующую новость.")
+            continue
+
+        if is_duplicate(post_text, posted_texts):
+            print("Дубликат, пробуем следующую новость.")
+            save_posted_link(link)
+            continue
+
+        if not send_telegram_photo(post_text, img_path):
+            print("Telegram не принял фото. Ссылку не сохраняем.")
+            return
+
+        save_posted_link(link)
+        save_posted_text(post_text)
+        print("Успех: пост опубликован и ссылка сохранена.")
         return
 
-    print("URL картинки:", image_url)
-    img_path = download_image(image_url)
-    if not img_path:
-        print("Картинка не скачалась. Ничего не отправляем и ссылку не сохраняем.")
-        return
-
-    post_text = get_ai_post(title)
-    if not post_text:
-        print("Текст не сгенерировался. Ничего не отправляем и ссылку не сохраняем.")
-        return
-
-    if not send_telegram_photo(post_text, img_path):
-        print("Telegram не принял фото. Ссылку не сохраняем.")
-        return
-
-    save_posted_link(link)
-    print("Успех: пост опубликован и ссылка сохранена.")
+    print("Не удалось опубликовать ни одну новость.")
 
 
 if __name__ == "__main__":
