@@ -20,3 +20,4 @@ https://www.wired.com/story/uncanny-valley-podcast-ai-researcher-resignations-bo
 https://the-decoder.com/google-openai-and-anthropic-are-all-bracing-for-deepseeks-next-big-release/
 https://the-decoder.com/openai-ships-api-upgrades-targeting-voice-reliability-and-agent-speed-for-developers/
 https://techcrunch.com/2026/02/23/canva-acquires-startups-working-on-animation-and-marketing/
+https://www.theverge.com/ai-artificial-intelligence/883456/anthropic-pentagon-department-of-defense-negotiations
