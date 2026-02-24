@@ -19,3 +19,4 @@ https://techcrunch.com/2026/02/23/anthropic-accuses-chinese-ai-labs-of-mining-cl
 https://www.wired.com/story/uncanny-valley-podcast-ai-researcher-resignations-bots-hiring-humans-evie-magazines-party/
 https://the-decoder.com/google-openai-and-anthropic-are-all-bracing-for-deepseeks-next-big-release/
 https://the-decoder.com/openai-ships-api-upgrades-targeting-voice-reliability-and-agent-speed-for-developers/
+https://techcrunch.com/2026/02/23/canva-acquires-startups-working-on-animation-and-marketing/
