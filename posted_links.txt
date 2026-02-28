@@ -76,3 +76,4 @@ https://techcrunch.com/2026/02/27/perplexitys-new-computer-is-another-bet-that-u
 https://techcrunch.com/podcast/whos-really-running-ai-inside-the-billion-dollar-battle-over-regulation-with-alex-bores/
 https://www.theverge.com/policy/886632/pentagon-designates-anthropic-supply-chain-risk-ai-standoff
 https://www.wired.com/story/anthropic-supply-chain-risk-shockwaves-silicon-valley/
+https://arstechnica.com/security/2026/02/google-is-using-clever-math-to-quantum-proof-https-certificates/
