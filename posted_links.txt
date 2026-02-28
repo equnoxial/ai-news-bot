@@ -84,3 +84,4 @@ https://www.wired.com/story/trump-moves-to-ban-anthropic-from-the-us-government/
 https://the-decoder.com/anthropic-calls-pentagons-supply-chain-risk-label-illegal-and-vows-to-challenge-it-in-court/
 https://the-decoder.com/a-new-benchmark-pits-five-ai-models-against-each-other-as-autonomous-social-media-agents-on-x/
 https://the-decoder.com/current-language-model-training-leaves-large-parts-of-the-internet-on-the-table/
+https://the-decoder.com/openai-calls-stuart-russell-a-doomer-in-court-after-its-ceo-co-signed-his-ai-extinction-warning/
