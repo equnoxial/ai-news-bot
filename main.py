@@ -1,6 +1,6 @@
-import difflib
-import os
-import random
+mport difflib
+mport os
+mport random
 import time
 from time import mktime
 from typing import Optional
